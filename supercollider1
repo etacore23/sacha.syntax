@@ -1,0 +1,123 @@
+s.options.numSynths = 1024;
+s.reboot;
+s.options.memSize = 65536;  // def = 8192 KB
+s.reboot;
+Server
+s.options.inDevice = "Soundflower (2ch)";  // input device
+s.options.outDevice = "Soundflower (2ch)";  // output device
+
+s.boot;
+
+s.freeAll;
+
+
+s.waitForBoot {
+   
+    SynthDef.new("darkOminousPad3", {
+        |out = 0|
+
+        
+        var osc, noise, lpf, distortion, fold, feedback, env, reverb, buffer, bufferDuration, grainAmp, boosted, grains, grainRate, grainTrigger, grainPos, grainDur, reverb2, lpf2, output, stereoPan, limit, glitchCondition, glitchBuffer, glitchFeedback, glitchPitch, glitchRing, glitchDelay, glitchTrigger, glitchSound, glitchLImit;
+
+       
+        osc = Mix(BrownNoise.ar([30, 32, 34]) * 0.15);
+
+       
+        noise = PinkNoise.ar([30, 32, 34]) * Crackle.kr(0.05).range(0.05, 0.25); 
+        feedback = DelayN.ar(noise, 0.8, 0.2) * 0.5;
+
+        fold = Fold.ar(Mix([osc, noise, feedback]), 0.9, 0.2) * 0.5;
+
+        
+        lpf = RLPF.ar(
+            in: fold,
+            freq: 1000,  
+			rq: SinOsc.kr(0.5).range(1, 0.2)    
+        );
+
+       
+        reverb = FreeVerb.ar(DelayN.ar(lpf, 5, 0.5), 0.8, 1, 0.2);
+
+       
+        distortion = Mix([Ringz.ar(reverb, 500, 0.1) * 0.5]); 
+		
+		
+        buffer = Buffer.alloc(s, s.sampleRate * 0.2, 2); 
+        bufferDuration = (buffer.numFrames / s.sampleRate);  
+
+       
+        RecordBuf.ar(Mix([distortion, distortion]), buffer, loop: 1); 
+
+		grainRate = LFNoise1.kr(0.2).range(0.01, 20); 
+		grainTrigger = Dust.ar(grainRate, 0.2);
+        grainDur = LFNoise1.kr(0.1).range(0.02, 0.5); 
+        grainPos = LFNoise1.kr(0.03).range(0, 1) * bufferDuration; 
+        grainAmp = LFNoise1.kr(0.03).range(0.2, 0.9) * bufferDuration;
+
+        grains = GrainBuf.ar(
+            2,  
+            grainTrigger, 
+            buffer.bufnum, 
+            grainDur,  
+            grainPos, 
+            grainAmp,  
+            LFNoise1.kr(0.2).range(-1, 1), 
+            LFNoise1.kr(0.2).range(0, 1)  
+        );
+
+       
+        reverb2 = FreeVerb.ar(Mix([distortion, grains]), mix: 1, room: 0.9, damp: 0.1);
+
+        boosted = BLowShelf.ar(reverb2, freq: 60, rs: 1, db: 10);
+
+       
+        stereoPan = Pan2.ar(boosted, LFNoise1.kr(0.1).range(-1, 1));  
+
+      
+        env = EnvGen.kr(Env.asr(attackTime: 5, sustainLevel: 1, releaseTime: 8), gate: 1, doneAction: 0);
+
+       
+        lpf2 = RLPF.ar(
+            in: stereoPan * distortion,
+            freq: 800,  
+            rq: 1    
+        );
+
+        output = lpf2 * env;
+
+
+glitchCondition = grainTrigger * 0.3; 
+glitchBuffer = PlayBuf.ar(1, buffer.bufnum, BufRateScale.kr(buffer.bufnum) * LFNoise1.kr(2).range(-6, -2), loop: 1, doneAction: 1);
+glitchFeedback = CombN.ar(glitchBuffer, 0.5, LFNoise1.kr(1).range(0.1, 0.5), 0.8);
+glitchSound = FreeVerb2.ar(
+    glitchCondition * glitchFeedback,
+	glitchCondition * (Crackle.ar([1500, 2000].choose, 0, glitchCondition) * 0.5 + output * 0.8) * 0.5, 1, 1, 0.1);
+glitchPitch = PitchShift.ar(glitchSound, 0.2, Impulse.kr(1.2).range(3.3, 0.5), 0.01, 0.02);
+glitchRing = Ringz.ar(glitchPitch, LFNoise2.kr(0.7).range(300, 500), LFNoise2.kr(0.2).range(0.1, pi), 1.5);
+glitchDelay = DelayN.ar(glitchRing, 8, 6, 1.2);
+glitchLImit = Limiter.ar(glitchDelay, 1, 0.02);
+
+
+output = output + glitchLImit;
+
+
+
+       
+        limit = Limiter.ar(output, level: 0.9, dur: 0.02) * 0.7; 
+
+       
+        Out.ar(out, limit);
+    }).add;
+
+    
+    s.sync;
+
+   
+    Synth("darkOminousPad3");
+};
+
+
+
+
+
+
